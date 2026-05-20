@@ -1,0 +1,227 @@
+const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
+const cors = require('cors');
+const FormData = require('form-data');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Telegram sozlamalari (O'zingiznikini joylashtiring)
+const TELEGRAM_BOT_TOKEN = 'BU_YERGA_BOT_TOKENINI_QO_YING';
+const TELEGRAM_CHAT_ID = 'BU_YERGA_UZINGIZNING_ID_RAQAMINGIZNI_QO_YING';
+
+// Rasmlarni xotirada vaqtincha saqlash xizmati
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.post('/api/send-payment', upload.single('receipt'), async (req, res) => {
+    try {
+        const { amount, orderId } = req.body;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ success: false, message: "Chek rasmi yuklanmagan!" });
+        }
+
+        // Telegramga yuboriladigan matn formatlash
+        const captionText = `🔔 NEW PAYMENT RECEIVED!\n\n` +
+                            `🆔 Order ID: ${orderId}\n` +
+                            `💰 Amount: ${amount} UZS\n` +
+                            `👤 Target: Azizjon Ziyadullayev\n` +
+                            `💳 Card: 5614 6818 0213 1585\n` +
+                            `📅 Time: ${new Date().toLocaleString()}`;
+
+        // Telegram API'ga rasm va matnni yuborish (Multipart Form Data)
+        const formData = new FormData();
+        formData.append('chat_id', TELEGRAM_CHAT_ID);
+        formData.append('caption', captionText);
+        formData.append('photo', file.buffer, { filename: file.originalname });
+
+        const telegramRes = await axios.post(
+            `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
+            formData,
+            { headers: formData.getHeaders() }
+        );
+
+        if (telegramRes.data.ok) {
+            res.json({ success: true, message: "Muvaffaqiyatli yuborildi!" });
+        } else {
+            res.status(500).json({ success: false, message: "Telegramga yuborishda xatolik" });
+        }
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: "Serverda xatolik yuz berdi" });
+    }
+});
+
+const PORT = 5000;
+app.listen(PORT, () => console.log(`Backend server running on port ${PORT}`));<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xavfsiz To'lov Tizimi</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <div class="max-w-md w-full bg-gray-800 rounded-2xl shadow-2xl border border-gray-700 p-6">
+        
+        <div id="step1" class="space-y-4">
+            <h2 class="text-xl font-bold text-yellow-400 text-center">To'lov summasini tanlang</h2>
+            <p class="text-sm text-gray-400 text-center">Davom etish uchun kerakli to'lov miqdorini belgilang</p>
+            
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="selectAmount(100000)" class="bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold transition">100 000 UZS</button>
+                <button onclick="selectAmount(250000)" class="bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold transition">250 000 UZS</button>
+                <button onclick="selectAmount(500000)" class="bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold transition">500 000 UZS</button>
+                <button onclick="selectAmount(1000000)" class="bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold transition">1 000 000 UZS</button>
+            </div>
+            
+            <div class="pt-2">
+                <label class="block text-xs text-gray-400 mb-1">Yoki o'zingiz ixtiyoriy summa kiriting:</label>
+                <input type="number" id="customAmount" placeholder="Summani yozing..." class="w-full bg-gray-900 p-3 rounded-xl border border-gray-700 text-white font-bold">
+            </div>
+
+            <button onclick="submitStep1()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold py-3 rounded-xl transition cursor-pointer">
+                To'lov sahifasiga o'tish
+            </button>
+        </div>
+
+        <div id="step2" class="hidden">
+            <div class="text-center mb-6">
+                <h2 class="text-xl font-bold text-yellow-400">P2P To'lov Tizimi</h2>
+                <p class="text-sm text-gray-400 mt-1">To'lovni yakunlash uchun sizga 20 vaqt berildi</p>
+                
+                <div class="inline-block bg-red-950/50 border border-red-500/30 rounded-xl px-4 py-2 mt-3">
+                    <span class="text-xs text-red-400 uppercase tracking-wider block font-semibold">Vaqt tugamoqda</span>
+                    <span id="timer" class="text-2xl font-mono font-bold text-red-500">20:00</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-900 p-4 rounded-xl border border-gray-700 space-y-4 mb-6">
+                <div>
+                    <span class="text-xs text-gray-400 block uppercase font-medium">Qabul qiluvchining kartasi (Humo/Uzcard)</span>
+                    <span id="cardNumber" class="text-lg font-mono font-bold tracking-wider text-green-400 block mt-1">5614 6818 0213 1585</span>
+                </div>
+
+                <div class="border-t border-gray-800 pt-3">
+                    <span class="text-xs text-gray-400 block uppercase font-medium">Qabul qiluvchi</span>
+                    <span class="text-base font-semibold text-white block mt-0.5">Azizjon Ziyadullayev</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 border-t border-gray-800 pt-3">
+                    <div>
+                        <span class="text-xs text-gray-400 block uppercase">To'lov summasi</span>
+                        <span id="finalAmount" class="text-lg font-extrabold text-white mt-0.5">0 UZS</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-400 block uppercase">Muddati</span>
+                        <span class="text-base font-mono font-medium text-white mt-0.5">20 MIN</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <label class="block text-sm font-medium text-gray-300">To'lov cheki (skrinshot) rasmini yuklang:</label>
+                <input type="file" id="receiptInput" accept="image/*" class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-yellow-500 file:text-gray-900 hover:file:bg-yellow-600 cursor-pointer bg-gray-900 p-2 rounded-xl border border-gray-700">
+                
+                <button id="submitBtn" onclick="sendPaymentData()" class="w-full bg-green-500 hover:bg-green-600 text-gray-900 font-bold py-3 px-6 rounded-xl transition duration-200 cursor-pointer text-center">
+                    To'lovni tasdiqlash
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let selectedAmount = 0;
+        let timeInSeconds = 20 * 60; // 20 daqiqa
+        const orderId = 'ORDER-' + Date.now();
+
+        function selectAmount(amt) {
+            selectedAmount = amt;
+            document.getElementById('customAmount').value = amt;
+        }
+
+        function submitStep1() {
+            const custom = document.getElementById('customAmount').value;
+            if(custom) selectedAmount = custom;
+
+            if (selectedAmount <= 0) {
+                alert('Iltimos, to\'lov summasini tanlang yoki kiriting!');
+                return;
+            }
+
+            document.getElementById('finalAmount').textContent = Number(selectedAmount).toLocaleString() + ' UZS';
+            document.getElementById('step1').classList.add('hidden');
+            document.getElementById('step2').classList.remove('hidden');
+            startTimer();
+        }
+
+        function startTimer() {
+            const timerElement = document.getElementById('timer');
+            const countdown = setInterval(() => {
+                let minutes = Math.floor(timeInSeconds / 60);
+                let seconds = timeInSeconds % 60;
+
+                minutes = minutes < 10 ? '0' + minutes : minutes;
+                seconds = seconds < 10 ? '0' + seconds : seconds;
+
+                timerElement.textContent = `${minutes}:${seconds}`;
+
+                if (timeInSeconds <= 0) {
+                    clearInterval(countdown);
+                    timerElement.textContent = "VAQT TUGADI";
+                    document.getElementById('submitBtn').disabled = true;
+                    document.getElementById('submitBtn').style.backgroundColor = '#4b5563'; 
+                    alert('To\'lov vaqti tugadi!');
+                }
+                timeInSeconds--;
+            }, 1000);
+        }
+
+        async function sendPaymentData() {
+            const fileInput = document.getElementById('receiptInput');
+            if (fileInput.files.length === 0) {
+                alert('Iltimos, oldin to\'lov cheki rasmini yuklang!');
+                return;
+            }
+
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerText = "Yuborilmoqda...";
+
+            const formData = new FormData();
+            formData.append('amount', selectedAmount);
+            formData.append('orderId', orderId);
+            formData.append('receipt', fileInput.files[0]);
+
+            try {
+                // Back-end serverga ma'lumot jo'natish
+                const response = await fetch('http://localhost:5000/api/send-payment', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if(data.success) {
+                    alert('To\'lov cheki muvaffaqiyatli qabul qilindi. Operator tez orada tekshiradi!');
+                    window.location.reload();
+                } else {
+                    alert('Xatolik yuz berdi: ' + data.message);
+                    btn.disabled = false;
+                    btn.innerText = "To'lovni tasdiqlash";
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Server bilan aloqa yo\'q. Backend yoqilganligini tekshiring.');
+                btn.disabled = false;
+                btn.innerText = "To'lovni tasdiqlash";
+            }
+        }
+    </script>
+</body>
+</html>                                                           
